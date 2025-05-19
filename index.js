@@ -15,7 +15,7 @@ dotEnv.config();
 
 
 app.use(cors({
-  origin: ['https://react-suby-vendordashboard.vercel.app'],
+  origin: ['https://backend-nodejs-suby-1-54sr.onrender.com'],
   // your frontend URL here
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true, // if you are using cookies or auth headers
