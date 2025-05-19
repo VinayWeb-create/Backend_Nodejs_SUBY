@@ -11,20 +11,15 @@ const firmSchema = new mongoose.Schema({
         required: true,
     },
     category: {
-        type: [{
-            type: String,
-            enum: ['veg', 'non-veg']
-        }]
+        type: [String], // This allows an array of strings
+        enum: ['veg', 'non-veg'] // Enum for category values
     },
     region: {
-        type: [{
-            type: String,
-            enum: ['south-indian', 'north-indian', 'chinese', 'bakery']
-        }]
+        type: [String], // This allows an array of strings
+        enum: ['south-indian', 'north-indian', 'chinese', 'bakery'] // Enum for region values
     },
     offer: {
         type: String,
-
     },
     image: {
         type: String
@@ -41,4 +36,4 @@ const firmSchema = new mongoose.Schema({
 
 const Firm = mongoose.model('Firm', firmSchema);
 
-module.exports = Firm
+module.exports = Firm;

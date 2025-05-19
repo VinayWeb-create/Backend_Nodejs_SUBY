@@ -1,19 +1,18 @@
 const express = require('express');
 const firmController = require('../controllers/firmController');
 const verifyToken = require('../middlewares/verifyToken');
+const path = require('path');  // This was missing
 
-
-const router = express.Router()
+const router = express.Router();
 
 router.post('/add-firm', verifyToken, firmController.addFirm);
 
 router.get('/uploads/:imageName', (req, res) => {
     const imageName = req.params.imageName;
     res.header('Content-Type', 'image/jpeg');
-    res.sendFile(path.join(__dirname, '..', 'uploads', imageName));
+    res.sendFile(path.join(__dirname, '..', 'uploads', imageName));  // This will now work
 });
 
 router.delete('/:firmId', firmController.deleteFirmById);
-
 
 module.exports = router;

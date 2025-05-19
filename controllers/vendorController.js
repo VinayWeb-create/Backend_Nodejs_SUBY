@@ -66,22 +66,43 @@ const getAllVendors = async(req, res) => {
 }
 
 
-const getVendorById = async(req, res) => {
-    const vendorId = req.params.apple;
+const getVendorById = async (req, res) => {
+  const { id } = req.params;
 
-    try {
-        const vendor = await Vendor.findById(vendorId).populate('firm');
-        if (!vendor) {
-            return res.status(404).json({ error: "Vendor not found" })
-        }
-        const vendorFirmId = vendor.firm[0]._id;
-        res.status(200).json({ vendorId, vendorFirmId, vendor })
-        console.log(vendorFirmId);
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Internal server error" });
+  if (!id || id === 'undefined') {
+    return res.status(400).json({ error: "Vendor ID is required and must be valid." });
+  }
+
+  try {
+    const vendor = await Vendor.findById(id);
+    if (!vendor) {
+      return res.status(404).json({ error: "Vendor not found" });
     }
-}
+    res.status(200).json(vendor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+const deleteVendorById = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id || id === 'undefined') {
+    return res.status(400).json({ error: "Vendor ID is required and must be valid." });
+  }
+
+  try {
+    const deletedVendor = await Vendor.findByIdAndDelete(id);
+    if (!deletedVendor) {
+      return res.status(404).json({ error: "Vendor not found" });
+    }
+    res.status(200).json({ message: "Vendor deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
 
 
-module.exports = { vendorRegister, vendorLogin, getAllVendors, getVendorById }
+
+module.exports = { vendorRegister, vendorLogin, getAllVendors, getVendorById, deleteVendorById };
