@@ -40,3 +40,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`server started and running at ${PORT}`);
 });
+console.log("MONGO_URI starts with:", process.env.MONGO_URI?.slice(0, 30));
