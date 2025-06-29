@@ -27,7 +27,7 @@ app.use('/product', productRoutes);
 app.use('/uploads', express.static('uploads'));
 
 // Welcome route
-app.get('*', (req, res) => {
+app.get('/', (req, res) => {
   res.send('<h1>🎉 Welcome to the SUBY Backend API 🎉</h1><p>Use /vendor, /firm, /product routes</p>');
 });
 
