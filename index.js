@@ -26,10 +26,16 @@ app.use('/firm', firmRoutes);
 app.use('/product', productRoutes);
 app.use('/uploads', express.static('uploads'));
 
-// Fallback for invalid routes
+// Welcome route
+app.get('/', (req, res) => {
+  res.send('<h1>🎉 Welcome to the SUBY Backend API 🎉</h1><p>Use /vendor, /firm, /product routes</p>');
+});
+
+// Fallback for unknown routes
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
