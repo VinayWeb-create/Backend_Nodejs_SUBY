@@ -9,7 +9,8 @@ const firmRoutes = require('./routes/firmRoutes');
 const productRoutes = require('./routes/productRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.REACT_APP_API_URL 
+
 
 // Validate required env vars early
 if (!process.env.MONGO_URI || !process.env.WhatIsYourName) {
