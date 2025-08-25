@@ -9,7 +9,7 @@ const firmRoutes = require('./routes/firmRoutes');
 const productRoutes = require('./routes/productRoutes');
 
 const app = express();
-const PORT = process.env.REACT_APP_API_URL 
+const PORT = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 
 // Validate required env vars early
