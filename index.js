@@ -9,8 +9,7 @@ const firmRoutes = require('./routes/firmRoutes');
 const productRoutes = require('./routes/productRoutes');
 
 const app = express();
-const PORT = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
+const PORT = process.env.PORT || 5000; // ✅ FIXED
 
 // Validate required env vars early
 if (!process.env.MONGO_URI || !process.env.WhatIsYourName) {
@@ -20,7 +19,7 @@ if (!process.env.MONGO_URI || !process.env.WhatIsYourName) {
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // built-in instead of body-parser
+app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // DB Connection
@@ -46,5 +45,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server started and running at http://localhost:${PORT}`);
+  console.log(`✅ Server started on port ${PORT}`);
 });
