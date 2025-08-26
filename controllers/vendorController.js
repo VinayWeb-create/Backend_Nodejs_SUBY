@@ -5,7 +5,7 @@ const dotEnv = require('dotenv');
 
 dotEnv.config();
 
-const secretKey = process.env.JWT_SECRET;
+const secretKey = process.env.WhatIsYourName;
 
 const vendorRegister = async (req, res) => {
   const { username, email, password } = req.body;
