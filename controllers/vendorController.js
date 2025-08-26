@@ -1,133 +1,101 @@
 const Vendor = require('../models/Vendor');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const dotEnv = require('dotenv');
 
-dotEnv.config();
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
-const secretKey = process.env.JWT_SECRET;
-
-const vendorRegister = async (req, res) => {
-  const { username, email, password } = req.body;
+// REGISTER
+exports.vendorRegister = async (req, res) => {
   try {
+    const { name, email, password } = req.body;
+
+    // check if vendor already exists
     const existing = await Vendor.findOne({ email });
     if (existing) {
-      return res.status(400).json({ error: "Email already taken" });
+      return res.status(400).json({ error: "Vendor already exists" });
     }
+
+    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newVendor = new Vendor({
-      username,
+
+    const vendor = new Vendor({
+      name,
       email,
-      password: hashedPassword
+      password: hashedPassword,
     });
-    await newVendor.save();
+
+    await vendor.save();
+
     res.status(201).json({ message: "Vendor registered successfully" });
-  } catch (error) {
-    console.error("Register error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+    console.error("Register Error:", err);
+    res.status(500).json({ error: "Server error during registration" });
   }
 };
 
-const vendorLogin = async (req, res) => {
-  const { email, password } = req.body;
+// LOGIN
+exports.vendorLogin = async (req, res) => {
   try {
-    const vendor = await Vendor.findOne({ email })
-      .populate({
-        path: 'firm',
-        populate: { path: 'products' },
-      });
+    const { email, password } = req.body;
 
-    if (!vendor || !vendor.password) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    const isMatch = await bcrypt.compare(password, vendor.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-
-    if (!secretKey) {
-      console.error("JWT_SECRET missing in environment");
-      return res.status(500).json({ error: "Server config error" });
-    }
-
-    const token = jwt.sign({ vendorId: vendor._id }, secretKey, { expiresIn: "1h" });
-
-    const vendorObj = vendor.toObject();
-    vendorObj.primaryFirm = vendor.firm?.[0] || null;
-
-    res.status(200).json({
-      success: "Login successful",
-      token,
-      vendorId: vendor._id,
-      vendor: vendorObj,
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-
-const getAllVendors = async (req, res) => {
-  try {
-    const vendors = await Vendor.find().populate('firm');
-    res.json({ vendors });
-  } catch (error) {
-    console.error("Get all vendors error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-const getVendorById = async (req, res) => {
-  const { id } = req.params;
-  if (!id || id === 'undefined') {
-    return res.status(400).json({ error: "Vendor ID is required and must be valid." });
-  }
-  try {
-    const vendor = await Vendor.findById(id)
-      .populate({
-        path: 'firm',
-        populate: {
-          path: 'products',
-        },
-      });
-
+    const vendor = await Vendor.findOne({ email });
     if (!vendor) {
       return res.status(404).json({ error: "Vendor not found" });
     }
 
-    const vendorObj = vendor.toObject();
-    vendorObj.primaryFirm = vendor.firm?.[0] || null;
-
-    res.status(200).json(vendorObj);
-  } catch (err) {
-    console.error("Get vendor by ID error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-};
-
-const deleteVendorById = async (req, res) => {
-  const { id } = req.params;
-  if (!id || id === 'undefined') {
-    return res.status(400).json({ error: "Vendor ID is required and must be valid." });
-  }
-  try {
-    const deletedVendor = await Vendor.findByIdAndDelete(id);
-    if (!deletedVendor) {
-      return res.status(404).json({ error: "Vendor not found" });
+    const isMatch = await bcrypt.compare(password, vendor.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Invalid credentials" });
     }
-    res.status(200).json({ message: "Vendor deleted successfully" });
+
+    // JWT Token
+    const token = jwt.sign({ id: vendor._id }, process.env.JWT_SECRET || "mysecret", {
+      expiresIn: "1h",
+    });
+
+    res.json({
+      message: "Login successful",
+      token,
+      vendor: {
+        id: vendor._id,
+        name: vendor.name,
+        email: vendor.email,
+      },
+    });
   } catch (err) {
-    console.error("Delete vendor error:", err);
+    console.error("Login Error:", err);
+    res.status(500).json({ error: "Server error during login" });
+  }
+};
+
+// GET ALL VENDORS
+exports.getAllVendors = async (req, res) => {
+  try {
+    const vendors = await Vendor.find();
+    res.json(vendors);
+  } catch (err) {
+    console.error("Fetch vendors error:", err);
+    res.status(500).json({ error: "Server error while fetching vendors" });
+  }
+};
+
+// GET SINGLE VENDOR
+exports.getVendorById = async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.params.id);
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+    res.json(vendor);
+  } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 };
 
-module.exports = {
-  vendorRegister,
-  vendorLogin,
-  getAllVendors,
-  getVendorById,
-  deleteVendorById,
+// DELETE VENDOR
+exports.deleteVendorById = async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndDelete(req.params.id);
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+    res.json({ message: "Vendor deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
 };
