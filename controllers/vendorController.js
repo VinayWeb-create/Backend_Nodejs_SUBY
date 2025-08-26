@@ -34,18 +34,25 @@ const vendorLogin = async (req, res) => {
     const vendor = await Vendor.findOne({ email })
       .populate({
         path: 'firm',
-        populate: {
-          path: 'products',
-        },
+        populate: { path: 'products' },
       });
 
-    if (!vendor || !(await bcrypt.compare(password, vendor.password))) {
+    if (!vendor || !vendor.password) {
       return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const isMatch = await bcrypt.compare(password, vendor.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    if (!secretKey) {
+      console.error("JWT_SECRET missing in environment");
+      return res.status(500).json({ error: "Server config error" });
     }
 
     const token = jwt.sign({ vendorId: vendor._id }, secretKey, { expiresIn: "1h" });
 
-    // Optional flatten primary firm if only one
     const vendorObj = vendor.toObject();
     vendorObj.primaryFirm = vendor.firm?.[0] || null;
 
@@ -53,13 +60,14 @@ const vendorLogin = async (req, res) => {
       success: "Login successful",
       token,
       vendorId: vendor._id,
-      vendor: vendorObj, // includes populated firm+products and primaryFirm
+      vendor: vendorObj,
     });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 const getAllVendors = async (req, res) => {
   try {
