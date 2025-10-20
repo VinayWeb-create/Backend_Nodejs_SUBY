@@ -7,6 +7,7 @@ dotEnv.config();
 
 const secretKey = process.env.WhatIsYourName;
 
+// ---------------- REGISTER ----------------
 const vendorRegister = async (req, res) => {
   const { username, email, password } = req.body;
   try {
@@ -14,12 +15,14 @@ const vendorRegister = async (req, res) => {
     if (existing) {
       return res.status(400).json({ error: "Email already taken" });
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const newVendor = new Vendor({
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword,
     });
+
     await newVendor.save();
     res.status(201).json({ message: "Vendor registered successfully" });
   } catch (error) {
@@ -28,8 +31,10 @@ const vendorRegister = async (req, res) => {
   }
 };
 
+// ---------------- LOGIN ----------------
 const vendorLogin = async (req, res) => {
   const { email, password } = req.body;
+
   try {
     const vendor = await Vendor.findOne({ email })
       .populate({
@@ -43,9 +48,8 @@ const vendorLogin = async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    const token = jwt.sign({ vendorId: vendor._id }, secretKey, { expiresIn: "1h" });
+    const token = jwt.sign({ vendorId: vendor._id }, secretKey, { expiresIn: "2h" });
 
-    // Ensure primaryFirm exists even if vendor has no firm
     const vendorObj = vendor.toObject();
     vendorObj.primaryFirm = vendor.firm?.[0] || { _id: null, firmName: "" };
 
@@ -53,7 +57,7 @@ const vendorLogin = async (req, res) => {
       success: "Login successful",
       token,
       vendorId: vendor._id,
-      vendor: vendorObj, // includes populated firm + primaryFirm
+      vendor: vendorObj,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -61,7 +65,7 @@ const vendorLogin = async (req, res) => {
   }
 };
 
-
+// ---------------- GET ALL ----------------
 const getAllVendors = async (req, res) => {
   try {
     const vendors = await Vendor.find().populate('firm');
@@ -72,11 +76,14 @@ const getAllVendors = async (req, res) => {
   }
 };
 
+// ---------------- GET BY ID ----------------
 const getVendorById = async (req, res) => {
   const { id } = req.params;
+
   if (!id || id === 'undefined') {
     return res.status(400).json({ error: "Vendor ID is required and must be valid." });
   }
+
   try {
     const vendor = await Vendor.findById(id)
       .populate({
@@ -100,11 +107,14 @@ const getVendorById = async (req, res) => {
   }
 };
 
+// ---------------- DELETE ----------------
 const deleteVendorById = async (req, res) => {
   const { id } = req.params;
+
   if (!id || id === 'undefined') {
     return res.status(400).json({ error: "Vendor ID is required and must be valid." });
   }
+
   try {
     const deletedVendor = await Vendor.findByIdAndDelete(id);
     if (!deletedVendor) {
@@ -117,10 +127,37 @@ const deleteVendorById = async (req, res) => {
   }
 };
 
+// ---------------- PROFILE (for UserDetails.jsx) ----------------
+const getVendorProfile = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "Token missing" });
+
+    const decoded = jwt.verify(token, secretKey);
+    const vendor = await Vendor.findById(decoded.vendorId)
+      .populate({
+        path: 'firm',
+        populate: { path: 'products' },
+      });
+
+    if (!vendor) return res.status(404).json({ error: "Vendor not found" });
+
+    const vendorObj = vendor.toObject();
+    vendorObj.primaryFirm = vendor.firm?.[0] || null;
+
+    res.status(200).json({ vendor: vendorObj });
+  } catch (err) {
+    console.error("Profile fetch error:", err);
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+};
+
+// ---------------- EXPORT ----------------
 module.exports = {
   vendorRegister,
   vendorLogin,
   getAllVendors,
   getVendorById,
   deleteVendorById,
+  getVendorProfile,
 };
