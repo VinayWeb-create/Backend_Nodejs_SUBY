@@ -45,21 +45,22 @@ const vendorLogin = async (req, res) => {
 
     const token = jwt.sign({ vendorId: vendor._id }, secretKey, { expiresIn: "1h" });
 
-    // Optional flatten primary firm if only one
+    // Ensure primaryFirm exists even if vendor has no firm
     const vendorObj = vendor.toObject();
-    vendorObj.primaryFirm = vendor.firm?.[0] || null;
+    vendorObj.primaryFirm = vendor.firm?.[0] || { _id: null, firmName: "" };
 
     res.status(200).json({
       success: "Login successful",
       token,
       vendorId: vendor._id,
-      vendor: vendorObj, // includes populated firm+products and primaryFirm
+      vendor: vendorObj, // includes populated firm + primaryFirm
     });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 const getAllVendors = async (req, res) => {
   try {
