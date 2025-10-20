@@ -9,5 +9,6 @@ router.post('/login', vendorController.vendorLogin);
 router.get('/all-vendors', vendorController.getAllVendors);
 router.get('/single-vendor/:id', vendorController.getVendorById);
 router.delete('/vendors/:id', vendorController.deleteVendorById);
+router.get("/profile", vendorController.getVendorProfile);
 
 module.exports = router;
