@@ -12,7 +12,13 @@ const productSchema = new mongoose.Schema({
     category: {
         type: [{
             type: String,
-            enum: ['veg', 'non-veg']
+            enum: ['veg', 'non-veg', 'snacks']
+        }]
+    },
+    cuisine: {
+        type: [{
+            type: String,
+            enum: ['south-indian', 'north-indian', 'chinese', 'bakery', 'fast-food', 'desserts', 'beverages']
         }]
     },
     image: {
@@ -32,4 +38,4 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model('Product', productSchema);
 
-module.exports = Product
+module.exports = Product;
