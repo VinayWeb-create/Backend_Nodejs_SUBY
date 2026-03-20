@@ -1,24 +1,27 @@
-const express    = require('express');
-const controller = require('../controllers/firmController');
+const express     = require('express');
+const controller  = require('../controllers/firmController');
 const verifyToken = require('../middlewares/verifyToken');
 
 const router = express.Router();
 
-// ─── ORDER MATTERS ───────────────────────────────────────────────────────────
-// Static/specific paths MUST come before dynamic /:param paths
-// otherwise Express matches "update-firm" as the value of :firmId or :id
-// ─────────────────────────────────────────────────────────────────────────────
+// ── DEBUG: log every request that hits /firm/* ──────────────────────────────
+router.use((req, res, next) => {
+  console.log(`[firmRoutes] ${req.method} ${req.path}`);
+  next();
+});
 
-// POST   /firm/add-firm
-router.post('/add-firm', verifyToken, controller.addFirm);
+// ── TEST route (no auth needed) — hit this to confirm new code is deployed ──
+// GET /firm/ping  →  should return { ok: true, message: "firm routes alive" }
+router.get('/ping', (req, res) => {
+  res.json({ ok: true, message: 'firm routes alive' });
+});
 
-// PUT    /firm/update-firm/:firmId
+// ── STATIC / SPECIFIC routes first ─────────────────────────────────────────
+router.post('/add-firm',           verifyToken, controller.addFirm);
 router.put('/update-firm/:firmId', verifyToken, controller.updateFirm);
 
-// DELETE /firm/:firmId
+// ── DYNAMIC param routes last ───────────────────────────────────────────────
 router.delete('/:firmId', verifyToken, controller.deleteFirmById);
-
-// GET    /firm/:id
-router.get('/:id', controller.getFirmById);
+router.get('/:id',                    controller.getFirmById);
 
 module.exports = router;
