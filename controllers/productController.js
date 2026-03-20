@@ -106,7 +106,53 @@ const getProductByFirm = async (req, res) => {
 };
 
 /* ===========================
-   5️⃣ DELETE PRODUCT + IMAGE
+   5️⃣ UPDATE PRODUCT
+=========================== */
+const updateProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const { productName, price, description, bestSeller, category } = req.body;
+
+    // If a new image was uploaded, delete the old one
+    if (req.file) {
+      if (product.image) {
+        const oldImagePath = path.join(__dirname, "..", product.image);
+        fs.unlink(oldImagePath, (err) => {
+          if (err) console.error("Old image delete failed:", err.message);
+        });
+      }
+      product.image = `/uploads/${req.file.filename}`;
+    }
+
+    if (productName !== undefined) product.productName = productName;
+    if (price !== undefined) product.price = price;
+    if (description !== undefined) product.description = description;
+    if (bestSeller !== undefined) product.bestSeller = bestSeller === 'true' || bestSeller === true;
+
+    // category can come as array or comma-separated string
+    if (category !== undefined) {
+      if (Array.isArray(category)) {
+        product.category = category;
+      } else if (typeof category === 'string') {
+        product.category = category ? [category] : [];
+      }
+    }
+
+    const updatedProduct = await product.save();
+
+    res.status(200).json({ message: "Product updated successfully", product: updatedProduct });
+  } catch (error) {
+    console.error("Update Product Error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+/* ===========================
+   6️⃣ DELETE PRODUCT + IMAGE
 =========================== */
 const deleteProductById = async (req, res) => {
   try {
@@ -132,10 +178,11 @@ const deleteProductById = async (req, res) => {
 };
 
 /* ===========================
-   6️⃣ EXPORTS
+   7️⃣ EXPORTS
 =========================== */
 module.exports = {
   addProduct: [upload.single("image"), addProduct],
   getProductByFirm,
+  updateProductById: [upload.single("image"), updateProductById],  // multer handles file
   deleteProductById,
 };
