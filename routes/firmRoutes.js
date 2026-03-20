@@ -1,23 +1,24 @@
-const express = require('express');
-const firmController = require('../controllers/firmController');
+const express    = require('express');
+const controller = require('../controllers/firmController');
 const verifyToken = require('../middlewares/verifyToken');
-const path = require('path');
 
 const router = express.Router();
 
-// ── IMPORTANT: specific routes must come BEFORE param routes ──
-router.post('/add-firm',              verifyToken, firmController.addFirm);
-router.put('/update-firm/:firmId',    verifyToken, firmController.updateFirm);
+// ─── ORDER MATTERS ───────────────────────────────────────────────────────────
+// Static/specific paths MUST come before dynamic /:param paths
+// otherwise Express matches "update-firm" as the value of :firmId or :id
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Local image serving (dev only)
-router.get('/uploads/:imageName', (req, res) => {
-  const imagePath = path.join(__dirname, '..', 'uploads', req.params.imageName);
-  res.sendFile(imagePath, (err) => {
-    if (err) res.status(404).json({ message: 'Image not found' });
-  });
-});
+// POST   /firm/add-firm
+router.post('/add-firm', verifyToken, controller.addFirm);
 
-router.delete('/:firmId', verifyToken, firmController.deleteFirmById);
-router.get('/:id',                    firmController.getFirmById);
+// PUT    /firm/update-firm/:firmId
+router.put('/update-firm/:firmId', verifyToken, controller.updateFirm);
+
+// DELETE /firm/:firmId
+router.delete('/:firmId', verifyToken, controller.deleteFirmById);
+
+// GET    /firm/:id
+router.get('/:id', controller.getFirmById);
 
 module.exports = router;
