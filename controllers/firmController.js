@@ -3,73 +3,127 @@ const Vendor = require('../models/Vendor');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Multer config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+/* ===========================
+   CLOUDINARY CONFIG
+=========================== */
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif/;
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.test(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only image files are allowed!"));
+const useCloudinary = !!(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
+
+console.log(`[Firm Images] Using ${useCloudinary ? 'Cloudinary ☁️' : 'local disk 💾'} storage`);
+
+/* ===========================
+   MULTER STORAGE
+=========================== */
+let upload;
+
+if (useCloudinary) {
+  const cloudStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: 'suby-firms',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      transformation: [{ width: 800, height: 800, crop: 'limit', quality: 'auto' }],
+    },
+  });
+  upload = multer({ storage: cloudStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+} else {
+  // Local fallback for development
+  const localDir = path.join(__dirname, '..', 'uploads');
+  if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+
+  const diskStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, localDir),
+    filename:    (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+  });
+  upload = multer({
+    storage: diskStorage,
+    fileFilter: (req, file, cb) => {
+      const allowed = /jpeg|jpg|png|gif/;
+      allowed.test(path.extname(file.originalname).toLowerCase())
+        ? cb(null, true)
+        : cb(new Error('Only image files are allowed!'));
+    },
+  });
+}
+
+/* ===========================
+   HELPER: get image URL
+=========================== */
+const getImageUrl = (file) => {
+  if (!file) return undefined;
+  return useCloudinary ? file.path : file.filename;
+};
+
+/* ===========================
+   HELPER: delete old image
+=========================== */
+const deleteImage = async (imageUrl) => {
+  if (!imageUrl) return;
+  if (useCloudinary && imageUrl.startsWith('http')) {
+    try {
+      const parts = imageUrl.split('/');
+      const fileWithExt = parts[parts.length - 1];
+      const publicId = `suby-firms/${fileWithExt.split('.')[0]}`;
+      await cloudinary.uploader.destroy(publicId);
+    } catch (err) {
+      console.error('Cloudinary firm image delete error:', err.message);
+    }
+  } else if (!imageUrl.startsWith('http')) {
+    const localPath = path.join(__dirname, '..', 'uploads', imageUrl);
+    fs.unlink(localPath, (err) => {
+      if (err && err.code !== 'ENOENT') console.error('Local firm image delete failed:', err.message);
+    });
   }
 };
 
-const upload = multer({ storage, fileFilter });
-
-// Normalize array helper
+/* ===========================
+   NORMALIZE ARRAY HELPER
+=========================== */
 const normalizeArray = (input) => {
   if (Array.isArray(input)) return input;
-  if (typeof input === 'string') return [input];
+  if (typeof input === 'string' && input) return [input];
   return [];
 };
 
+/* ===========================
+   ADD FIRM
+=========================== */
 const addFirm = async (req, res) => {
   try {
     let { firmName, area, category, region, offer } = req.body;
 
     category = normalizeArray(category);
-    region = normalizeArray(region);
+    region   = normalizeArray(region);
 
     if (!firmName || !area || !category.length || !region.length) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ message: 'Missing required fields' });
     }
-
-    const image = req.file ? req.file.filename : undefined;
 
     const vendor = await Vendor.findById(req.vendorId);
-    if (!vendor) {
-      return res.status(404).json({ message: "Vendor not found" });
-    }
+    if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
 
     if (vendor.firm.length > 0) {
-      return res.status(400).json({ message: "Vendor can have only one firm" });
+      return res.status(400).json({ message: 'Vendor can have only one firm' });
     }
 
     const existingFirm = await Firm.findOne({ firmName });
-    if (existingFirm) {
-      return res.status(409).json({ message: "Firm name already exists" });
-    }
+    if (existingFirm) return res.status(409).json({ message: 'Firm name already exists' });
 
-    const firm = new Firm({
-      firmName,
-      area,
-      category,
-      region,
-      offer,
-      image,
-      vendor: vendor._id
-    });
+    const image = getImageUrl(req.file);
 
+    const firm = new Firm({ firmName, area, category, region, offer, image, vendor: vendor._id });
     const savedFirm = await firm.save();
 
     vendor.firm.push(savedFirm._id);
@@ -78,26 +132,40 @@ const addFirm = async (req, res) => {
     return res.status(200).json({
       message: 'Firm added successfully',
       firmId: savedFirm._id,
-      vendorFirmName: savedFirm.firmName
+      vendorFirmName: savedFirm.firmName,
     });
   } catch (error) {
-    console.error("Add Firm Error:", error);
-    return res.status(500).json({ message: "Internal server error", error: error.message });
+    console.error('Add Firm Error:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
 
+/* ===========================
+   GET FIRM BY ID
+=========================== */
+const getFirmById = async (req, res) => {
+  try {
+    const firm = await Firm.findById(req.params.id)
+      .populate('vendor', 'username email')
+      .populate('products');
+    if (!firm) return res.status(404).json({ error: 'Firm not found' });
+    res.status(200).json(firm);
+  } catch (error) {
+    console.error('Get Firm Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/* ===========================
+   DELETE FIRM
+=========================== */
 const deleteFirmById = async (req, res) => {
   try {
     const firmId = req.params.firmId;
     const deletedFirm = await Firm.findByIdAndDelete(firmId);
-    if (!deletedFirm) return res.status(404).json({ error: "Firm not found" });
+    if (!deletedFirm) return res.status(404).json({ error: 'Firm not found' });
 
-    if (deletedFirm.image) {
-      const imagePath = path.join(__dirname, '..', 'uploads', deletedFirm.image);
-      fs.unlink(imagePath, (err) => {
-        if (err) console.error("Image delete error:", err);
-      });
-    }
+    await deleteImage(deletedFirm.image);
 
     const vendor = await Vendor.findById(deletedFirm.vendor);
     if (vendor) {
@@ -105,28 +173,15 @@ const deleteFirmById = async (req, res) => {
       await vendor.save();
     }
 
-    return res.status(200).json({ message: "Firm deleted successfully" });
+    return res.status(200).json({ message: 'Firm deleted successfully' });
   } catch (error) {
-    console.error("Delete Firm Error:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-const getFirmById = async (req, res) => {
-  try {
-    const firm = await Firm.findById(req.params.id)
-      .populate('vendor', 'username email')
-      .populate('products');
-    if (!firm) return res.status(404).json({ error: "Firm not found" });
-    res.status(200).json(firm);
-  } catch (error) {
-    console.error("Get Firm Error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Delete Firm Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
 module.exports = {
   addFirm: [upload.single('image'), addFirm],
   deleteFirmById,
-  getFirmById
+  getFirmById,
 };
