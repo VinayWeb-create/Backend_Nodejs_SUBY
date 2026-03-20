@@ -1,14 +1,18 @@
-const Firm = require('../models/Firm');
+const Firm   = require('../models/Firm');
 const Vendor = require('../models/Vendor');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const path   = require('path');
+const fs     = require('fs');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-/* ===========================
+/* ══════════════════════════════════════
    CLOUDINARY CONFIG
-=========================== */
+   Env vars set in Render dashboard:
+     CLOUDINARY_CLOUD_NAME
+     CLOUDINARY_API_KEY
+     CLOUDINARY_API_SECRET
+══════════════════════════════════════ */
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
@@ -21,26 +25,27 @@ const useCloudinary = !!(
   process.env.CLOUDINARY_API_SECRET
 );
 
-console.log(`[Firm Images] Using ${useCloudinary ? 'Cloudinary ☁️' : 'local disk 💾'} storage`);
+console.log(`[Firm] Image storage: ${useCloudinary ? 'Cloudinary ☁️' : 'local disk 💾'}`);
 
-/* ===========================
-   MULTER STORAGE
-=========================== */
+/* ══════════════════════════════════════
+   MULTER SETUP
+══════════════════════════════════════ */
 let upload;
 
 if (useCloudinary) {
   const cloudStorage = new CloudinaryStorage({
     cloudinary,
     params: {
-      folder: 'suby-firms',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-      transformation: [{ width: 800, height: 800, crop: 'limit', quality: 'auto' }],
+      folder:           'suby-firms',
+      allowed_formats:  ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      transformation:   [{ width: 800, height: 800, crop: 'limit', quality: 'auto' }],
     },
   });
   upload = multer({ storage: cloudStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 } else {
   const localDir = path.join(__dirname, '..', 'uploads');
   if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+
   const diskStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, localDir),
     filename:    (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
@@ -50,50 +55,59 @@ if (useCloudinary) {
     fileFilter: (req, file, cb) => {
       /jpeg|jpg|png|gif|webp/.test(path.extname(file.originalname).toLowerCase())
         ? cb(null, true)
-        : cb(new Error('Only image files are allowed!'));
+        : cb(new Error('Only image files are allowed'));
     },
   });
 }
 
-/* ===========================
+/* ══════════════════════════════════════
    HELPERS
-=========================== */
+══════════════════════════════════════ */
+
+// Get storable image value from uploaded file
 const getImageUrl = (file) => {
   if (!file) return undefined;
+  // Cloudinary: file.path = full https URL
+  // Local disk: file.filename = bare filename
   return useCloudinary ? file.path : file.filename;
 };
 
-const deleteImage = async (imageUrl) => {
+// Delete old image when replacing
+const deleteOldImage = async (imageUrl) => {
   if (!imageUrl) return;
+
   if (useCloudinary && imageUrl.startsWith('http')) {
     try {
-      const parts      = imageUrl.split('/');
-      const fileWithExt = parts[parts.length - 1];
+      // Extract public_id from URL: last segment without extension
+      const segments   = imageUrl.split('/');
+      const fileWithExt = segments[segments.length - 1];
       const publicId   = `suby-firms/${fileWithExt.split('.')[0]}`;
       await cloudinary.uploader.destroy(publicId);
     } catch (err) {
-      console.error('Cloudinary firm image delete error:', err.message);
+      console.error('Cloudinary delete error:', err.message);
     }
-  } else if (!imageUrl.startsWith('http')) {
+  } else if (imageUrl && !imageUrl.startsWith('http')) {
+    // Local file
     const localPath = path.join(__dirname, '..', 'uploads', imageUrl);
     fs.unlink(localPath, (err) => {
-      if (err && err.code !== 'ENOENT') console.error('Local firm image delete failed:', err.message);
+      if (err && err.code !== 'ENOENT') console.error('Local image delete error:', err.message);
     });
   }
 };
 
 const normalizeArray = (input) => {
-  if (Array.isArray(input)) return input;
+  if (Array.isArray(input))              return input.filter(Boolean);
   if (typeof input === 'string' && input) return [input];
   return [];
 };
 
-/* ===========================
+/* ══════════════════════════════════════
    ADD FIRM
-=========================== */
+══════════════════════════════════════ */
 const addFirm = async (req, res) => {
   try {
     let { firmName, area, category, region, offer } = req.body;
+
     category = normalizeArray(category);
     region   = normalizeArray(region);
 
@@ -111,19 +125,17 @@ const addFirm = async (req, res) => {
     const existingFirm = await Firm.findOne({ firmName });
     if (existingFirm) return res.status(409).json({ message: 'Firm name already exists' });
 
-    const firm = new Firm({
-      firmName, area, category, region, offer,
-      image: getImageUrl(req.file),
-      vendor: vendor._id,
-    });
+    const image     = getImageUrl(req.file);
+    const savedFirm = await new Firm({
+      firmName, area, category, region, offer, image, vendor: vendor._id,
+    }).save();
 
-    const savedFirm = await firm.save();
     vendor.firm.push(savedFirm._id);
     await vendor.save();
 
     return res.status(200).json({
-      message: 'Firm added successfully',
-      firmId: savedFirm._id,
+      message:        'Firm added successfully',
+      firmId:         savedFirm._id,
       vendorFirmName: savedFirm.firmName,
     });
   } catch (error) {
@@ -132,41 +144,40 @@ const addFirm = async (req, res) => {
   }
 };
 
-/* ===========================
-   UPDATE FIRM
-=========================== */
+/* ══════════════════════════════════════
+   UPDATE FIRM   ← PUT /firm/update-firm/:firmId
+══════════════════════════════════════ */
 const updateFirm = async (req, res) => {
   try {
     const firm = await Firm.findById(req.params.firmId);
     if (!firm) return res.status(404).json({ message: 'Firm not found' });
 
-    // Make sure this firm belongs to the logged-in vendor
+    // Ownership check
     if (firm.vendor.toString() !== req.vendorId.toString()) {
       return res.status(403).json({ message: 'Not authorized to update this firm' });
     }
 
     const { firmName, area, category, region, offer } = req.body;
 
-    if (firmName  !== undefined) firm.firmName = firmName;
-    if (area      !== undefined) firm.area     = area;
-    if (offer     !== undefined) firm.offer    = offer;
+    if (firmName !== undefined) firm.firmName = firmName;
+    if (area     !== undefined) firm.area     = area;
+    if (offer    !== undefined) firm.offer    = offer;
 
     if (category !== undefined) firm.category = normalizeArray(category);
     if (region   !== undefined) firm.region   = normalizeArray(region);
 
-    // Handle new image
+    // Replace image if a new file was uploaded
     if (req.file) {
-      await deleteImage(firm.image);
+      await deleteOldImage(firm.image);
       firm.image = getImageUrl(req.file);
     }
 
-    const updatedFirm = await firm.save();
+    const updated = await firm.save();
 
-    // Also update firmName in localStorage-friendly response
     return res.status(200).json({
-      message: 'Firm updated successfully',
-      firm: updatedFirm,
-      vendorFirmName: updatedFirm.firmName,
+      message:        'Firm updated successfully',
+      firm:           updated,
+      vendorFirmName: updated.firmName,
     });
   } catch (error) {
     console.error('Update Firm Error:', error);
@@ -174,9 +185,9 @@ const updateFirm = async (req, res) => {
   }
 };
 
-/* ===========================
+/* ══════════════════════════════════════
    GET FIRM BY ID
-=========================== */
+══════════════════════════════════════ */
 const getFirmById = async (req, res) => {
   try {
     const firm = await Firm.findById(req.params.id)
@@ -190,20 +201,19 @@ const getFirmById = async (req, res) => {
   }
 };
 
-/* ===========================
+/* ══════════════════════════════════════
    DELETE FIRM
-=========================== */
+══════════════════════════════════════ */
 const deleteFirmById = async (req, res) => {
   try {
-    const firmId      = req.params.firmId;
-    const deletedFirm = await Firm.findByIdAndDelete(firmId);
+    const deletedFirm = await Firm.findByIdAndDelete(req.params.firmId);
     if (!deletedFirm) return res.status(404).json({ error: 'Firm not found' });
 
-    await deleteImage(deletedFirm.image);
+    await deleteOldImage(deletedFirm.image);
 
     const vendor = await Vendor.findById(deletedFirm.vendor);
     if (vendor) {
-      vendor.firm = vendor.firm.filter(f => f.toString() !== firmId);
+      vendor.firm = vendor.firm.filter(f => f.toString() !== req.params.firmId);
       await vendor.save();
     }
 
@@ -214,9 +224,12 @@ const deleteFirmById = async (req, res) => {
   }
 };
 
+/* ══════════════════════════════════════
+   EXPORTS
+══════════════════════════════════════ */
 module.exports = {
   addFirm:       [upload.single('image'), addFirm],
   updateFirm:    [upload.single('image'), updateFirm],
-  deleteFirmById,
   getFirmById,
+  deleteFirmById,
 };
