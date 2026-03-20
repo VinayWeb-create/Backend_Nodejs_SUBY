@@ -5,31 +5,17 @@ const path = require('path');
 
 const router = express.Router();
 
-/**
- * @route POST /firm/add-firm
- * @desc Add a new firm (requires authentication)
- */
-router.post('/add-firm', verifyToken, firmController.addFirm);
+router.post('/add-firm',         verifyToken, firmController.addFirm);
+router.put('/update-firm/:firmId', verifyToken, firmController.updateFirm);
+router.delete('/:firmId',        verifyToken, firmController.deleteFirmById);
+router.get('/:id',                             firmController.getFirmById);
 
-/**
- * @route GET /firm/uploads/:imageName
- * @desc Serve firm images
- */
+// Serve local uploads (dev only)
 router.get('/uploads/:imageName', (req, res) => {
-  const imageName = req.params.imageName;
-  const imagePath = path.join(__dirname, '..', 'uploads', imageName);
-
+  const imagePath = path.join(__dirname, '..', 'uploads', req.params.imageName);
   res.sendFile(imagePath, (err) => {
-    if (err) {
-      res.status(404).json({ message: 'Image not found' });
-    }
+    if (err) res.status(404).json({ message: 'Image not found' });
   });
 });
-
-/**
- * @route DELETE /firm/:firmId
- * @desc Delete a firm by ID (requires authentication)
- */
-router.delete('/:firmId', verifyToken, firmController.deleteFirmById);
 
 module.exports = router;
