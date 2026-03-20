@@ -39,10 +39,8 @@ if (useCloudinary) {
   });
   upload = multer({ storage: cloudStorage, limits: { fileSize: 5 * 1024 * 1024 } });
 } else {
-  // Local fallback for development
   const localDir = path.join(__dirname, '..', 'uploads');
   if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
-
   const diskStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, localDir),
     filename:    (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
@@ -50,8 +48,7 @@ if (useCloudinary) {
   upload = multer({
     storage: diskStorage,
     fileFilter: (req, file, cb) => {
-      const allowed = /jpeg|jpg|png|gif/;
-      allowed.test(path.extname(file.originalname).toLowerCase())
+      /jpeg|jpg|png|gif|webp/.test(path.extname(file.originalname).toLowerCase())
         ? cb(null, true)
         : cb(new Error('Only image files are allowed!'));
     },
@@ -59,23 +56,20 @@ if (useCloudinary) {
 }
 
 /* ===========================
-   HELPER: get image URL
+   HELPERS
 =========================== */
 const getImageUrl = (file) => {
   if (!file) return undefined;
   return useCloudinary ? file.path : file.filename;
 };
 
-/* ===========================
-   HELPER: delete old image
-=========================== */
 const deleteImage = async (imageUrl) => {
   if (!imageUrl) return;
   if (useCloudinary && imageUrl.startsWith('http')) {
     try {
-      const parts = imageUrl.split('/');
+      const parts      = imageUrl.split('/');
       const fileWithExt = parts[parts.length - 1];
-      const publicId = `suby-firms/${fileWithExt.split('.')[0]}`;
+      const publicId   = `suby-firms/${fileWithExt.split('.')[0]}`;
       await cloudinary.uploader.destroy(publicId);
     } catch (err) {
       console.error('Cloudinary firm image delete error:', err.message);
@@ -88,9 +82,6 @@ const deleteImage = async (imageUrl) => {
   }
 };
 
-/* ===========================
-   NORMALIZE ARRAY HELPER
-=========================== */
 const normalizeArray = (input) => {
   if (Array.isArray(input)) return input;
   if (typeof input === 'string' && input) return [input];
@@ -103,7 +94,6 @@ const normalizeArray = (input) => {
 const addFirm = async (req, res) => {
   try {
     let { firmName, area, category, region, offer } = req.body;
-
     category = normalizeArray(category);
     region   = normalizeArray(region);
 
@@ -121,11 +111,13 @@ const addFirm = async (req, res) => {
     const existingFirm = await Firm.findOne({ firmName });
     if (existingFirm) return res.status(409).json({ message: 'Firm name already exists' });
 
-    const image = getImageUrl(req.file);
+    const firm = new Firm({
+      firmName, area, category, region, offer,
+      image: getImageUrl(req.file),
+      vendor: vendor._id,
+    });
 
-    const firm = new Firm({ firmName, area, category, region, offer, image, vendor: vendor._id });
     const savedFirm = await firm.save();
-
     vendor.firm.push(savedFirm._id);
     await vendor.save();
 
@@ -136,6 +128,48 @@ const addFirm = async (req, res) => {
     });
   } catch (error) {
     console.error('Add Firm Error:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+
+/* ===========================
+   UPDATE FIRM
+=========================== */
+const updateFirm = async (req, res) => {
+  try {
+    const firm = await Firm.findById(req.params.firmId);
+    if (!firm) return res.status(404).json({ message: 'Firm not found' });
+
+    // Make sure this firm belongs to the logged-in vendor
+    if (firm.vendor.toString() !== req.vendorId.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update this firm' });
+    }
+
+    const { firmName, area, category, region, offer } = req.body;
+
+    if (firmName  !== undefined) firm.firmName = firmName;
+    if (area      !== undefined) firm.area     = area;
+    if (offer     !== undefined) firm.offer    = offer;
+
+    if (category !== undefined) firm.category = normalizeArray(category);
+    if (region   !== undefined) firm.region   = normalizeArray(region);
+
+    // Handle new image
+    if (req.file) {
+      await deleteImage(firm.image);
+      firm.image = getImageUrl(req.file);
+    }
+
+    const updatedFirm = await firm.save();
+
+    // Also update firmName in localStorage-friendly response
+    return res.status(200).json({
+      message: 'Firm updated successfully',
+      firm: updatedFirm,
+      vendorFirmName: updatedFirm.firmName,
+    });
+  } catch (error) {
+    console.error('Update Firm Error:', error);
     return res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
@@ -161,7 +195,7 @@ const getFirmById = async (req, res) => {
 =========================== */
 const deleteFirmById = async (req, res) => {
   try {
-    const firmId = req.params.firmId;
+    const firmId      = req.params.firmId;
     const deletedFirm = await Firm.findByIdAndDelete(firmId);
     if (!deletedFirm) return res.status(404).json({ error: 'Firm not found' });
 
@@ -181,7 +215,8 @@ const deleteFirmById = async (req, res) => {
 };
 
 module.exports = {
-  addFirm: [upload.single('image'), addFirm],
+  addFirm:       [upload.single('image'), addFirm],
+  updateFirm:    [upload.single('image'), updateFirm],
   deleteFirmById,
   getFirmById,
 };
