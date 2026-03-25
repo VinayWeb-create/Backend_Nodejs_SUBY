@@ -152,10 +152,7 @@ const getVendorProfile = async (req, res) => {
   }
 };
 
- const { changePassword } = require('../controllers/passwordController');
-  const verifyToken = require('../middlewares/verifyToken');
-  
-  router.put('/change-password', verifyToken, changePassword);
+
 
 // ---------------- EXPORT ----------------
 module.exports = {
