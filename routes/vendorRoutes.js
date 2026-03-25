@@ -3,6 +3,11 @@ const express = require('express');
 const path = require('path');
 const router = express.Router();
 
+const { changePassword } = require('../controllers/passwordController');
+  const verifyToken = require('../middlewares/verifyToken');
+  
+  router.put('/change-password', verifyToken, changePassword);
+
 router.post('/register', vendorController.vendorRegister);
 router.post('/login', vendorController.vendorLogin);
 
